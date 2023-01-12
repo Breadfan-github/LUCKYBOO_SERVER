@@ -1,7 +1,7 @@
 const express = require("express")
 const mysql = require("mysql")
 const cors = require("cors")
-const shortid = require('shortid')
+const shortid = require('shortid-36')
 
 const app = express()
 
@@ -17,26 +17,115 @@ const db = mysql.createConnection({
 })
 
 
-app.post('/webhook', (req,res) => {
-  const whPassThroughArgs = req.body.whPassThroughArgs
-  const args = JSON.parse(whPassThroughArgs);
-  const referralCode = args.referral
-  const amount = args.amount
+// app.post('/webhook', (req,res) => {
+//   const whPassThroughArgs = req.body.whPassThroughArgs
+//   const args = JSON.parse(whPassThroughArgs);
+//   const referralCode = args.referral
+//   const amount = args.amount
+// 
+//   console.log(args)
+// 
+//   db.query(
+//     "INSERT INTO users (referralcode, amount) VALUES (?,?)", 
+//     [referralCode, amount], 
+//     (err, result) => {
+//       if(err) {
+//         console.log(err)
+//       } else {
+//         console.log(result)
+//       }
+//       
+//     })
+// })
 
-  console.log(args)
+app.post('/checkreferralcode', (req,res) => {
+  const referralCode = req.body.referrer
 
-  db.query(
-    "INSERT INTO crossmintusers (referralcode, amount) VALUES (?,?)", 
-    [referralCode, amount], 
-    (err, result) => {
-      if(err) {
-        console.log(err)
-      } else {
-        console.log(result)
-      }
-      
+  db.query("SELECT * FROM users WHERE referralCode = ?",[referralCode],
+       (err,result) => { 
+          if (result.length === 0) {
+          res.send({message: "Invalid referral link!"})
+          } else {
+            res.send({message: "available"})
+          }
+  })
+})
+
+const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' WHEN groupsales >= 101 THEN '40' WHEN groupsales >= 51 THEN '35' WHEN groupsales >= 11 THEN '30' WHEN groupsales >= 0 THEN '25'";
+
+
+
+app.post('/checkreferrerDIRECTpercent', (req,res) => {
+  const referrer = req.body.referrer
+  const amount = req.body.amount
+
+
+  db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
+    (err,result) => {
+    
+    console.log(result)
+
+
+    //plus upline group sales and sendiri amount all +1, maybe return as an array and loop? or 
+
+    //plus mintreferrals +1
+    db.query(
+    "UPDATE users SET mintreferrals = mintreferrals + ? WHERE referralcode = ?",
+    [amount, refCode]
+    )
+
+
+    //plus direct sales claimable amount
+    db.query(
+    "UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
+    [amount, refCode]
+    )
+
+    //return upline's referralcode / percentage
+    db.query(
+     `SELECT referralcode, CASE ${cas} END AS percentage FROM ( 
+          SELECT referralcode, groupsales FROM users
+          join ${refCode}upline on users.referralcode = ${refCode}upline.upline) getpercent;`, 
+          (err, result) => {
+            console.log(result)
+          }
+    )
+
+     
+
+
+    //select referrer upline branch, descending by mint referrals and sorting/join by rank and percent. 
+
+    //
+
+
+
     })
 })
+
+
+app.post('/addclaimable', (req,res) => {
+  const claimable = req.body.claimable
+  const referrer = req.body.refCode
+
+  db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?", [claimable, referrer],
+    (err,result) => {
+
+      if(result.length > 0) {
+        res.send(result)   
+      } else {
+        res.send({message: "no user"})
+      }
+    })
+  
+})
+
+
+
+
+
+
+
 
 
 
@@ -46,12 +135,12 @@ app.post('/register', (req,res) => {
 
   const email = req.body.email 
   const password = req.body.password
-  const referrer = req.body.referrerCode
+  const referrer = req.body.referrer
   const referralCode = shortid.generate()
   let loginResult
 
 
-
+1
   if(email == '') {
     res.send({message: "Missing email"})
   }  else if (password == '') {
@@ -78,10 +167,14 @@ app.post('/register', (req,res) => {
                       if(err) {
                           console.log(err)
                         } else {
-                          db.query(
-                            "UPDATE users SET signupreferralcount = signupreferralcount + 1 WHERE referralcode = ?",
-                            [referrer]
-                            )
+                           //+1 referral sign up to upline's 
+                          db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
+                            [referrer])
+                          //createuplinetable and populate with upline's upline table
+                          db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`)                  
+                          db.query(`INSERT INTO ${referralCode}upline SELECT * FROM ${referrer}upline`)
+                           //add upline referralcode into your upline table
+                          db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer])
                           res.send({message: "Registration successful. Please Login."})
                           }
                         })} 
@@ -93,6 +186,7 @@ app.post('/register', (req,res) => {
 
   )
         }
+
       })
 
 
@@ -154,22 +248,13 @@ app.post('/login', (req,res) => {
 //     })
 // })
 
-app.post('/mintref', (req,res) => {
-  const refCode = req.body.referralCode
-  const amount = req.body.mintAmount
-
-  db.query(
-    "UPDATE users SET signupreferralcount = mintreferralcount + ? WHERE referralcode = ?",
-    [amount, refCode]
-    )
-})
 
 
 app.post('/refData', (req,res) => {
   const referralCode = req.body.refCode
 
   db.query(
-    "SELECT DISTINCT * FROM logindatabase.users AS u INNER JOIN logindatabase.users AS s on s.referrercode = u.referralcode WHERE s.referrercode = ?",
+    "SELECT DISTINCT * FROM LuckyUsers.users AS u INNER JOIN LuckyUsers.users AS s on s.referrer = u.referralcode WHERE s.referrer = ?",
     [referralCode],
     (err, result) => {
       if(err) {
