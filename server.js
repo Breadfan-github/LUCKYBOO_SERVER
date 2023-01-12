@@ -155,7 +155,7 @@ app.post('/register', (req,res) => {
     (err,result) => {
       if (result.length == 0) {
 
-      db.query("SELECT * FROM users WHERE referralCode = ?", [referrer],
+      db.query("SELECT * FROM users WHERE referralCode = '?'", [referrer],
        (err,result) => { 
 
           if (result.length == 0) {
@@ -166,7 +166,7 @@ app.post('/register', (req,res) => {
                db.query("INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
                           [email, password, referrer, referralCode])
                           //+1 referral sign up to upline's 
-                          db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
+                          db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = '?'",
                             [referrer])
                           //createuplinetable and populate with upline's upline table
                           db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`)                  
