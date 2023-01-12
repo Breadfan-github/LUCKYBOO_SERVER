@@ -155,31 +155,30 @@ app.post('/register', (req,res) => {
     (err,result) => {
       if (result.length == 0) {
 
-      db.query("SELECT * FROM users WHERE referralCode = ?",[referrer],
+      db.query("SELECT * FROM users WHERE referralCode = ?", [referrer],
        (err,result) => { 
+
           if (result.length == 0) {
           res.send({message: "Referral code does not exist."})
-          } else {
-               db.query(
-                    "INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
-                    [email, password, referrer, referralCode],
-                    (err, result)=> {
-                      if(err) {
-                          console.log(err)
-                        } else {
-                           //+1 referral sign up to upline's 
+          } 
+
+          else {
+               db.query("INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
+                          [email, password, referrer, referralCode])
+                          //+1 referral sign up to upline's 
                           db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
                             [referrer])
                           //createuplinetable and populate with upline's upline table
                           db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`)                  
                           db.query(`INSERT INTO ${referralCode}upline SELECT * FROM ${referrer}upline`)
                            //add upline referralcode into your upline table
-                          db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer])
-                          res.send({message: "Registration successful. Please Login."})
-                          }
-                        })} 
-          }
-   ) }else {
+                          db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer], () => {
+                            res.send({message: "Registration successful. Please Login."})
+                          })
+                          
+                          
+                       } 
+          }) }else {
         res.send({message: "User already exists. Please login."})
       }
     }
