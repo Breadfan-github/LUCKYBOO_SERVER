@@ -56,36 +56,49 @@ const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' 
 
 
 app.post('/checkreferrerDIRECTpercent', (req,res) => {
+  req.connection.setTimeout( 1000 * 60 * 10 ); // ten minutes
   const referrer = req.body.referrer
   const amount = req.body.amount
+  const price = req.body.price
 
 
   db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
     (err,result) => {
+
+
+    let data = JSON.stringify(result[0].percent)
+    let numData = data.replace(/"/g, "");
+
+    console.log("amount", amount)
+    console.log("price", price)
+    console.log("numData", numData)
     
-    console.log(result)
+    
+    const claimable = amount * price * numData /100
+    console.log(claimable)
+
 
 
     //plus upline group sales and sendiri amount all +1, maybe return as an array and loop? or 
 
-    //plus mintreferrals +1
+    // plus mintreferrals +1
     db.query(
     "UPDATE users SET mintreferrals = mintreferrals + ? WHERE referralcode = ?",
-    [amount, refCode]
+    [amount, referrer]
     )
 
 
     //plus direct sales claimable amount
     db.query(
     "UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
-    [amount, refCode]
+    [claimable, referrer]
     )
 
     //return upline's referralcode / percentage
     db.query(
      `SELECT referralcode, CASE ${cas} END AS percentage FROM ( 
           SELECT referralcode, groupsales FROM users
-          join ${refCode}upline on users.referralcode = ${refCode}upline.upline) getpercent;`, 
+          JOIN ${referrer}upline ON users.referralcode = ${referrer}upline.upline) getpercent;`, 
           (err, result) => {
             console.log(result)
           }
@@ -132,6 +145,7 @@ app.post('/addclaimable', (req,res) => {
 const mailformat = /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
 
 app.post('/register', (req,res) => {
+  console.log("register call")
 
   const email = req.body.email 
   const password = req.body.password
@@ -140,7 +154,7 @@ app.post('/register', (req,res) => {
   let loginResult
 
 
-1
+
   if(email == '') {
     res.send({message: "Missing email"})
   }  else if (password == '') {
@@ -150,13 +164,14 @@ app.post('/register', (req,res) => {
   } else if (email.match(mailformat) == null){
     res.send({message: "Invalid email format"})
   }else {
-
+console.log("register call2")
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
       if (result.length == 0) {
 
-      db.query("SELECT * FROM users WHERE referralCode = '?'", [referrer],
+      db.query("SELECT * FROM users WHERE referralcode = ?", [referrer],
        (err,result) => { 
+        
 
           if (result.length == 0) {
           res.send({message: "Referral code does not exist."})
@@ -166,7 +181,7 @@ app.post('/register', (req,res) => {
                db.query("INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
                           [email, password, referrer, referralCode])
                           //+1 referral sign up to upline's 
-                          db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = '?'",
+                          db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
                             [referrer])
                           //createuplinetable and populate with upline's upline table
                           db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`)                  
