@@ -41,100 +41,167 @@ const db = mysql.createConnection({
 app.post('/checkreferralcode', (req,res) => {
   const referralCode = req.body.referrer
 
-  db.query("SELECT * FROM users WHERE referralCode = ?",[referralCode],
+  db.query("SELECT * FROM users WHERE referralcode = ?",[referralCode],
        (err,result) => { 
-          if (result.length === 0) {
-          res.send({message: "Invalid referral link!"})
-          } else {
-            res.send({message: "available"})
-          }
+
+     if(err){
+    console.log("Error occured while executing query: ",err)
+    res.send({message: "Error occured while executing query"})
+}else{
+    if (result.length === 0) {
+      res.send({message: "Invalid referral link!"})
+    } else {
+      res.send({message: "available"})
+    }
+}
   })
 })
+
+
+
+
 
 const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' WHEN groupsales >= 101 THEN '40' WHEN groupsales >= 51 THEN '35' WHEN groupsales >= 11 THEN '30' WHEN groupsales >= 0 THEN '25'";
 
 
 
+
+
+
+
+//main
 app.post('/checkreferrerDIRECTpercent', (req,res) => {
-  req.connection.setTimeout( 1000 * 60 * 10 ); // ten minutes
+  // req.connection.setTimeout( 1000 * 60 * 10 ); // ten minutes
   const referrer = req.body.referrer
-  const amount = req.body.amount
   const price = req.body.price
 
+  let rulesArray = [25, 30, 35, 40, 42, 43]
+  let txArray = []
 
-  db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
+
+
+    //select referrer %
+    db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
     (err,result) => {
 
-
-    let data = JSON.stringify(result[0].percent)
-    let numData = data.replace(/"/g, "");
-
-    console.log("amount", amount)
-    console.log("price", price)
-    console.log("numData", numData)
+      if(err){
+    console.log(err)
     
-    
-    const claimable = amount * price * numData /100
-    console.log(claimable)
+     }else{
 
+    const referrerPercent = result[0].percent  
+    const claimable =  price * referrerPercent /100
+   console.log(claimable)
 
+    //plus upline group sales & referrer's
+    db.query(`UPDATE users SET groupsales = groupsales + 1 WHERE referralcode IN (SELECT upline FROM ${referrer}upline)`)
+    db.query("UPDATE users SET groupsales = groupsales + 1 WHERE referralcode = ?", [referrer])
 
-    //plus upline group sales and sendiri amount all +1, maybe return as an array and loop? or 
-
-    // plus mintreferrals +1
-    db.query(
-    "UPDATE users SET mintreferrals = mintreferrals + ? WHERE referralcode = ?",
-    [amount, referrer]
-    )
-
+    //plus referrer's mintreferrals +1
+    db.query("UPDATE users SET mintreferrals = mintreferrals + 1 WHERE referralcode = ?",
+    [referrer])
 
     //plus direct sales claimable amount
-    db.query(
-    "UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
-    [claimable, referrer]
-    )
+    db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
+    [claimable, referrer])
 
-    //return upline's referralcode / percentage
-    db.query(
-     `SELECT referralcode, CASE ${cas} END AS percentage FROM ( 
-          SELECT referralcode, groupsales FROM users
-          JOIN ${referrer}upline ON users.referralcode = ${referrer}upline.upline) getpercent;`, 
-          (err, result) => {
-            console.log(result)
-          }
-    )
-
-     
-
-
-    //select referrer upline branch, descending by mint referrals and sorting/join by rank and percent. 
-
-    //
-
-
-
-    })
-})
-
-
-app.post('/addclaimable', (req,res) => {
-  const claimable = req.body.claimable
-  const referrer = req.body.refCode
-
-  db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?", [claimable, referrer],
-    (err,result) => {
-
-      if(result.length > 0) {
-        res.send(result)   
-      } else {
-        res.send({message: "no user"})
-      }
-    })
+  const updateClaimable = () => {
   
+      let actualPercentageArr = [25,   5,    5,     5,     2,     1]
+      let percentageArr       = [25,   30,   35,    40,    42,   43]
+
+      let bonus = 0
+
+
+     let start = percentageArr.indexOf(referrerPercent)
+     console.log("start", start)
+     
+    for(var i = start; i < txArray.length; i++) {
+
+    if(txArray[i] === 'x') {
+
+      bonus += actualPercentageArr[i]
+    } else {
+
+      
+     const claimable = (price * (actualPercentageArr[i] + bonus) /100)
+      db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
+        [claimable, txArray[i]], ()=> {
+          if (bonus > 0) {
+          bonus = 0 
+        } 
+        })
+
+      }
+
+    }}
+
+
+const getArr = async () => {
+  const promises = [];
+
+  for (var i = 0; i < rulesArray.length; i++) {
+    await position(i);
+  }
+  await Promise.all(promises).then(() => {
+      // this .then() handler is only here to we can log the final result
+      updateClaimable();
+      console.log(txArray)
+     
+  });;
+}
+
+const position = async (i) => {
+  return new Promise((resolve, reject) => {
+    db.query(
+      `SELECT MIN(groupsales) AS salesz FROM (
+      SELECT referralcode, groupsales, CASE ${cas} END AS percentage FROM (SELECT referralcode, groupsales FROM users
+      join ${referrer}upline on users.referralcode = ${referrer}upline.upline) getpercent)abc WHERE percentage = ${rulesArray[i]}`,
+      (err, result) => {
+
+        if (err) {
+          reject(err);
+        }
+
+        if (result[0].salesz == null) {
+          txArray.push("x");
+          resolve();
+        } else {
+          const sales = result[0].salesz;
+          db.query(
+            `SELECT referralcode, groupsales FROM users join ${referrer}upline ON users.referralcode =  ${referrer}upline.upline WHERE groupsales = ?
+            ORDER BY id DESC limit 1`,
+            [sales],
+            async (err, result) => {
+              if (err) {
+                reject(err);
+              }
+              txArray.push(result[0].referralcode);
+              
+              resolve();
+            }
+          );
+        }
+      }
+    );
+  });
+};
+
+
+
+getArr()
+   
+    
+   }
+
+
+
+
+
+    
+
 })
-
-
-
+ })
 
 
 
@@ -145,7 +212,6 @@ app.post('/addclaimable', (req,res) => {
 const mailformat = /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
 
 app.post('/register', (req,res) => {
-  console.log("register call")
 
   const email = req.body.email 
   const password = req.body.password
@@ -164,7 +230,6 @@ app.post('/register', (req,res) => {
   } else if (email.match(mailformat) == null){
     res.send({message: "Invalid email format"})
   }else {
-console.log("register call2")
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
       if (result.length == 0) {
@@ -189,20 +254,17 @@ console.log("register call2")
                            //add upline referralcode into your upline table
                           db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer], () => {
                             res.send({message: "Registration successful. Please Login."})
-                          })
-                          
+                          })                         
                           
                        } 
           }) }else {
         res.send({message: "User already exists. Please login."})
       }
     }
-
   )
         }
 
       })
-
 
 
 app.post('/login', (req,res) => {
@@ -243,26 +305,6 @@ app.post('/login', (req,res) => {
   }})
 
 
-// app.post('/referral', (req,res) => {
-//   const referralCode = req.body.referralCode
-// 
-//   db.query(
-//     "SELECT walletaddress FROM users WHERE referralcode = ?",
-//     [referralCode],
-//     (err, result) => {
-//       if(err) {
-//         res.send({err: err})
-//       }
-// 
-//       if(result.length > 0) {
-//         res.send(result)
-//       } else {
-//         res.send({message: "fetch wallet fail"})
-//       }
-//     })
-// })
-
-
 
 app.post('/refData', (req,res) => {
   const referralCode = req.body.refCode
@@ -282,6 +324,9 @@ app.post('/refData', (req,res) => {
       }
     })
 })
+
+
+
 
 
 
