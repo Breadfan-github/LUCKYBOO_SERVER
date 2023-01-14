@@ -52,9 +52,13 @@ app.post('/crossmintwebhook', (req,res) => {
 
   
 
-  const args = req.body.whPassThroughArgs
-  console.log(args)
-//   const args = JSON.parse(whPassThroughArgs);
+
+  const Args = req.body.whPassThroughArgs
+
+  console.log("string args", Args)
+  const args = JSON.parse(Args);
+  console.log("obj args", Args)
+
   const referralCode = args.referral
   const price = args.price
 
