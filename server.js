@@ -50,7 +50,7 @@ const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' 
 
 app.post('/crossmintwebhook', (req,res) => {
 
-  const whPassThroughArgs = req.body.whPassThroughArgs
+  const { whPassThroughArgs } = req.body
   const args = JSON.parse(whPassThroughArgs);
   const referralCode = args.referral
   const price = args.price
