@@ -55,15 +55,17 @@ app.post('/crossmintwebhook', (req,res) => {
  console.log("req", req.body)
 
 
-  // // const { whPassThroughArgs } = req.body;
   const Args = req.body.passThroughArgs;
   console.log("str args", Args)
 
   const args = JSON.parse(Args);
   console.log("obj args", args)
 
-  const referralCode = args.referral
+  const referralCode = args.referrer
   const price = args.price
+
+  console.log(price)
+  console.log(referralCode)
 
   let rulesArray = [25, 30, 35, 40, 42, 43]
   let txArray = []
