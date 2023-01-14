@@ -51,7 +51,7 @@ const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' 
 app.post('/crossmintwebhook', (req,res) => {
 
   
-
+ console.log("receiving data")
 
   const Args = req.body.whPassThroughArgs
 
