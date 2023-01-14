@@ -50,20 +50,13 @@ const cas = "WHEN groupsales >= 1501 THEN '43' WHEN groupsales >= 501 THEN '42' 
 
 app.post('/crossmintwebhook', (req,res) => {
 
-  
- console.log("receiving data")
- console.log("req", req.body)
-
 
   const Args = req.body.passThroughArgs;
   const parsedArg = JSON.parse(JSON.parse(Args));
-  console.log("obj args", parsedArg)
+
 
   const referrer = parsedArg.referrer
   const price = parsedArg.price
-
-  console.log(price)
-  console.log(referrer)
 
   let rulesArray = [25, 30, 35, 40, 42, 43]
   let txArray = []
@@ -130,10 +123,12 @@ const getArr = async () => {
   await Promise.all(promises).then(() => {
       // this .then() handler is only here to we can log the final result
       updateClaimable();
-      console.log(txArray)
+      
      
   });;
 }
+
+
 
 const position = async (i) => {
   return new Promise((resolve, reject) => {
@@ -217,6 +212,9 @@ app.post('/addClaimable', (req,res) => {
     db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
     [claimable, referrer])
 
+
+
+
   const updateClaimable = () => {
   
       let actualPercentageArr = [25,   5,    5,     5,     2,     1]
@@ -255,7 +253,7 @@ const getArr = async () => {
   await Promise.all(promises).then(() => {
       // this .then() handler is only here to we can log the final result
       updateClaimable();
-      console.log(txArray)
+     
      
   });;
 }
@@ -297,7 +295,6 @@ const position = async (i) => {
 };
 
 
-
 getArr()
    
     
@@ -305,6 +302,42 @@ getArr()
 })
  })
 
+
+app.post('/submitanswer', (req, res) => {
+
+  const securityAns = req.body.securityAns
+  const email = req.body.email
+
+  db.query("SELECT * FROM users WHERE email = ? AND securityanswer = ?", [email, securityAns], (err,result)=> {
+
+    if(err){
+      console.log(err)
+    } else if(result.length == 0){
+      res.send({message: "wrong answer"})
+    } else {
+      res.send({message: "Correct"})
+    }
+
+})
+
+})
+
+
+
+app.post('/changepassword', (req, res) => {
+
+  const newPassword = req.body.newPassword
+  const email = req.body.email
+
+
+     db.query("UPDATE users SET password = ? WHERE email = ?", [newPassword, email], (err,result)=> {
+      if(err){
+        console.log(err)
+      } else{
+            res.send({message: "successful"})
+          }
+        })
+})
 
 
 app.post('/getsecurityques', (req,res) => {
@@ -324,7 +357,7 @@ app.post('/getsecurityques', (req,res) => {
 
         } else {
 
-          db.query("SELECT securityques FROM users WHERE email = ?", [email], (err,result) => {
+          db.query("SELECT securityquestion FROM users WHERE email = ?", [email], (err,result) => {
               if(err){
 
             console.log(err)  
@@ -338,6 +371,7 @@ app.post('/getsecurityques', (req,res) => {
 
 })
 })
+
 
 
 
@@ -367,7 +401,7 @@ app.post('/register', (req,res) => {
   }else if (securityAns == '') {
     res.send({message: "Missing Security Answer"})
   }else if (securityQues == '') {
-    res.send({message: "Missing Security Question"})
+    res.send({message: "Invalid Security Question"})
   } {
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
