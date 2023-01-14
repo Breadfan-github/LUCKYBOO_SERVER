@@ -56,11 +56,11 @@ app.post('/crossmintwebhook', (req,res) => {
 
 
   const Args = req.body.passThroughArgs;
-  const args = JSON.parse(Args);
-  console.log("obj args", args)
+  const parsedArg = JSON.parse(JSON.parse(Args));
+  console.log("obj args", parsedArg)
 
-  const referrer = args.referrer
-  const price = args.price
+  const referrer = parsedArg.referrer
+  const price = parsedArg.price
 
   console.log(price)
   console.log(referrer)
@@ -307,6 +307,37 @@ getArr()
 
 
 
+app.post('/getsecurityques', (req,res) => {
+
+  const email = req.body.email
+
+  db.query("SELECT * FROM users WHERE email = ?",[email],
+    (err,result) => {
+        if(err){
+      console.log(err) 
+
+       }else{
+
+        if (result.length == 0){
+
+          res.send({message: "invalid user"})
+
+        } else {
+
+          db.query("SELECT securityques FROM users WHERE email = ?", [email], (err,result) => {
+              if(err){
+
+            console.log(err)  
+
+             }else{
+
+              res.send(result)
+              }
+
+        })}} 
+
+})
+})
 
 
 
@@ -318,6 +349,8 @@ app.post('/register', (req,res) => {
   const email = req.body.email 
   const password = req.body.password
   const referrer = req.body.referrer
+  const securityQues = req.body.securityQues
+  const securityAns = req.body.securityAns
   const referralCode = shortid.generate()
   let loginResult
 
@@ -331,7 +364,11 @@ app.post('/register', (req,res) => {
     res.send({message: "Missing referral code"})
   } else if (email.match(mailformat) == null){
     res.send({message: "Invalid email format"})
-  }else {
+  }else if (securityAns == '') {
+    res.send({message: "Missing Security Answer"})
+  }else if (securityQues == '') {
+    res.send({message: "Missing Security Question"})
+  } {
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
       if(err){
@@ -349,8 +386,8 @@ app.post('/register', (req,res) => {
           } 
 
           else {
-               db.query("INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
-                          [email, password, referrer, referralCode])
+               db.query("INSERT INTO users (email, password, referrercode, referralcode, securityquestion, securityanswer) VALUES(?,?,?,?,?,?)", 
+                          [email, password, referrer, referralCode, securityQues, securityAns])
                           //+1 referral sign up to upline's 
                           db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
                             [referrer])
