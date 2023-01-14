@@ -59,11 +59,11 @@ app.post('/crossmintwebhook', (req,res) => {
   const args = JSON.parse(Args);
   console.log("obj args", args)
 
-  const referralCode = args["referrer"]
-  const price = args["price"]
+  const referrer = args.referrer
+  const price = args.price
 
   console.log(price)
-  console.log(referralCode)
+  console.log(referrer)
 
   let rulesArray = [25, 30, 35, 40, 42, 43]
   let txArray = []
