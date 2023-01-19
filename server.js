@@ -11,7 +11,7 @@ app.use(cors())
 const db = mysql.createConnection({
   user: "root",
   password: "207055Ff",
-  host: "34.70.147.174",
+  host: "34.27.116.143",
   port: "3306",
   database: "LuckyUsers",
 })
@@ -303,106 +303,87 @@ getArr()
  })
 
 
-app.post('/submitanswer', (req, res) => {
-
-  const securityAns = req.body.securityAns
-  const email = req.body.email
-
-  db.query("SELECT * FROM users WHERE email = ? AND securityanswer = ?", [email, securityAns], (err,result)=> {
-
-    if(err){
-      console.log(err)
-    } else if(result.length == 0){
-      res.send({message: "wrong answer"})
-    } else {
-      res.send({message: "Correct"})
-    }
-
-})
-
-})
-
-
-
-app.post('/changepassword', (req, res) => {
-
-  const newPassword = req.body.newPassword
-  const email = req.body.email
-
-
-     db.query("UPDATE users SET password = ? WHERE email = ?", [newPassword, email], (err,result)=> {
-      if(err){
-        console.log(err)
-      } else{
-            res.send({message: "successful"})
-          }
-        })
-})
-
-
-app.post('/getsecurityques', (req,res) => {
-
-  const email = req.body.email
-
-  db.query("SELECT * FROM users WHERE email = ?",[email],
-    (err,result) => {
-        if(err){
-      console.log(err) 
-
-       }else{
-
-        if (result.length == 0){
-
-          res.send({message: "invalid user"})
-
-        } else {
-
-          db.query("SELECT securityquestion FROM users WHERE email = ?", [email], (err,result) => {
-              if(err){
-
-            console.log(err)  
-
-             }else{
-
-              res.send(result)
-              }
-
-        })}} 
-
-})
-})
-
-
+// app.post('/submitanswer', (req, res) => {
+// 
+//   const securityAns = req.body.securityAns
+//   const email = req.body.email
+// 
+//   db.query("SELECT * FROM users WHERE email = ? AND securityanswer = ?", [email, securityAns], (err,result)=> {
+// 
+//     if(err){
+//       console.log(err)
+//     } else if(result.length == 0){
+//       res.send({message: "wrong answer"})
+//     } else {
+//       res.send({message: "Correct"})
+//     }
+// 
+// })
+// 
+// })
+// 
+// 
+// 
+// app.post('/changepassword', (req, res) => {
+// 
+//   const newPassword = req.body.newPassword
+//   const email = req.body.email
+// 
+// 
+//      db.query("UPDATE users SET password = ? WHERE email = ?", [newPassword, email], (err,result)=> {
+//       if(err){
+//         console.log(err)
+//       } else{
+//             res.send({message: "successful"})
+//           }
+//         })
+// })
+// 
+// 
+// app.post('/getsecurityques', (req,res) => {
+// 
+//   const email = req.body.email
+// 
+//   db.query("SELECT * FROM users WHERE email = ?",[email],
+//     (err,result) => {
+//         if(err){
+//       console.log(err) 
+// 
+//        }else{
+// 
+//         if (result.length == 0){
+// 
+//           res.send({message: "invalid user"})
+// 
+//         } else {
+// 
+//           db.query("SELECT securityquestion FROM users WHERE email = ?", [email], (err,result) => {
+//               if(err){
+// 
+//             console.log(err)  
+// 
+//              }else{
+// 
+//               res.send(result)
+//               }
+// 
+//         })}} 
+// 
+// })
+// })
 
 
 
-const mailformat = /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
+
 
 app.post('/register', (req,res) => {
 
   const email = req.body.email 
   const password = req.body.password
   const referrer = req.body.referrer
-  const securityQues = req.body.securityQues
-  const securityAns = req.body.securityAns
   const referralCode = shortid.generate()
   let loginResult
 
-
-
-  if(email == '') {
-    res.send({message: "Missing email"})
-  }  else if (password == '') {
-    res.send({message: "Missing password"})
-  } else if(referrer == '') {
-    res.send({message: "Missing referral code"})
-  } else if (email.match(mailformat) == null){
-    res.send({message: "Invalid email format"})
-  }else if (securityAns == '') {
-    res.send({message: "Missing Security Answer"})
-  }else if (securityQues == '') {
-    res.send({message: "Invalid Security Question"})
-  } {
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
       if(err){
@@ -420,19 +401,40 @@ app.post('/register', (req,res) => {
           } 
 
           else {
-               db.query("INSERT INTO users (email, password, referrercode, referralcode, securityquestion, securityanswer) VALUES(?,?,?,?,?,?)", 
-                          [email, password, referrer, referralCode, securityQues, securityAns])
+               db.query("INSERT INTO users (email, password, referrercode, referralcode) VALUES(?,?,?,?)", 
+                          [email, password, referrer, referralCode])
                           //+1 referral sign up to upline's 
                           db.query("UPDATE users SET signupreferrals = signupreferrals + 1 WHERE referralcode = ?",
                             [referrer])
-                          //createuplinetable and populate with upline's upline table
-                          db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`)                  
+                          //createuplinetable and populate with upline's upline table + downline
+                          db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`) 
+
+                          db.query(`CREATE TABLE ${referralCode}downline (downline varchar(255))`) 
+
+                           db.query(`SELECT * FROM ${referrer}upline`, (err, result)=> {
+                            if (err) {
+                              console.log(err)
+
+                            } else {    
+                            console.log(result.length) 
+
+                              for(var i = 0; i < result.length; i++) {
+
+                                db.query(`INSERT INTO ${result[i].upline}downline (downline) VALUES(?)`, [referralCode]) 
+                              }
+                            } 
+                           }) 
+                           
+                           db.query(`INSERT INTO ${referrer}downline (downline) VALUES(?)`, [referralCode]) 
+
+                          // loop?
+                          // db.query(`INSERT INTO (select * from ${referrer}upline) downline`)  
+
                           db.query(`INSERT INTO ${referralCode}upline SELECT * FROM ${referrer}upline`)
                            //add upline referralcode into your upline table
                           db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer], () => {
                             res.send({message: "Registration successful. Please Login."})
                           })                         
-                          
                        } 
           }) }else {
         res.send({message: "User already exists. Please login."})
@@ -441,7 +443,7 @@ app.post('/register', (req,res) => {
      }
       
     })
-        }
+        
 
       })
 
@@ -450,13 +452,6 @@ app.post('/login', (req,res) => {
   const email = req.body.email 
   const password = req.body.password
 
-  if(email == '') {
-    res.send({message: "Missing email"})
-  } else if (password == '') {
-    res.send({message: "Missing password"})
-  }  else if (email.match(mailformat) == null) {
-    res.send({message: "Invalid email format"})
-  } else {
   db.query(
     "SELECT * FROM users WHERE email = ? ",
     [email], (err, result) => {
@@ -487,7 +482,7 @@ app.post('/login', (req,res) => {
       }
      }     
     })
-  }})
+  })
 
 
 
