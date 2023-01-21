@@ -2,11 +2,13 @@ const express = require("express")
 const mysql = require("mysql")
 const cors = require("cors")
 const shortid = require('shortid-36')
+const cookieParser = require('cookie-parser')
 
 const app = express()
 
 app.use(express.json())
-app.use(cors())
+app.use(cookieParser())
+app.use(cors({credentials: true, origin: 'http://localhost:3000'}));
 
 const db = mysql.createConnection({
   user: "root",
@@ -16,8 +18,30 @@ const db = mysql.createConnection({
   database: "LuckyUsers",
 })
 
+app.post('/set-cookie', (req,res) => {
+  console.log("setting cookie")
+  console.log(req.body)
+  const ref = req.body.ref
+  res.cookie('ref', ref)
+  res.send({message: "cookies set"})
+})
 
+app.get('/set-cookieget', (req,res) => {
+ 
+  res.cookie('ref', 'ref')
+  res.send({message: "cookies set"})
+})
 
+app.post('/resetclaimable', (req,res) => {
+  const email = req.body.referrer
+  db.query("UPDATE users SET claimable = 0 WHERE email = ?", [email], 
+    (err, result) => {
+      if(err) {
+        console.log(err)
+      }
+    })
+
+})
 
 app.post('/checkreferralcode', (req,res) => {
 
