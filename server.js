@@ -8,7 +8,7 @@ const { google } = require('googleapis');
 
 const app = express()
 
-app.use(cors({credentials: true, origin: 'https://app.lucky.boo/'}));
+app.use(cors({credentials: true, origin: 'https://app.lucky.boo'}));
 app.use(express.json())
 app.use(cookieParser())
 
