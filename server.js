@@ -8,9 +8,10 @@ const { google } = require('googleapis');
 
 const app = express()
 
+app.use(cors({credentials: true, origin: 'https://app.lucky.boo/'}));
 app.use(express.json())
 app.use(cookieParser())
-app.use(cors({credentials: true, origin: ['https://app.lucky.boo', 'http://localhost:3000']}));
+
 
 const db = mysql.createConnection({
   user: "root",
