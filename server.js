@@ -10,7 +10,7 @@ const app = express()
 
 app.use(express.json())
 app.use(cookieParser())
-app.use(cors({credentials: true, origin: 'http://localhost:3000'}));
+app.use(cors({credentials: true, origin: 'https://app.lucky.boo'}));
 
 const db = mysql.createConnection({
   user: "root",
@@ -39,7 +39,7 @@ const oAuth2Client = new google.auth.OAuth2(
 );
 oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
 
-async function sendMail(hash, email) {
+async function sendVerifyMail(hash, email) {
   try {
     const accessToken = await oAuth2Client.getAccessToken();
 
@@ -83,6 +83,50 @@ Thanks, The Lucky Team`,
   }
 }
 
+async function sendPasswordMail(hash, email) {
+  try {
+    const accessToken = await oAuth2Client.getAccessToken();
+
+    const transport = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: 'luckyboonoreply@gmail.com',
+        clientId: CLIENT_ID,
+        clientSecret: CLEINT_SECRET,
+        refreshToken: REFRESH_TOKEN,
+        accessToken: accessToken,
+      },
+    });
+
+    const mailOptions = {
+      from: 'luckyboo-no-reply <luckyboonoreply@gmail.com>',
+      to: email,
+      subject: '[LUCKY] Reset Password for Lucky Affiliate Account.',
+      text:  `Dear ${email},
+
+You have requested to reset your password. Please click on the link below to proceed.
+
+http://localhost:3000/resetpassword/?token=${hash} 
+
+Thanks, The Lucky Team`,
+      html: `<h4> Dear ${email} </h4>,
+
+<p> You have requested to reset your password.  <p/>
+<p>  Please click on the link below to proceed. <p/>
+
+<p>http://localhost:3000/resetpassword/?token=${hash} <p/>
+
+<p> Thanks, The Lucky Team <p/>`,
+    };
+
+    const result = await transport.sendMail(mailOptions);
+    return result;
+  } catch (error) {
+    return error;
+  }
+}
+
 
 
 
@@ -101,6 +145,7 @@ app.get('/get-refcookie', (req,res)=> {
 
 
 app.post('/resetclaimable', (req,res) => {
+  console.log("reset claim api called")
   const email = req.body.referrer
   db.query("UPDATE users SET claimable = 0 WHERE email = ?", [email], 
     (err, result) => {
@@ -157,6 +202,16 @@ app.post('/crossmintwebhook', (req,res) => {
      //plus upline group sales & referrer's
     db.query(`UPDATE users SET groupsales = groupsales + 1 WHERE referralcode IN (SELECT upline FROM ${referrer}upline)`)
     db.query("UPDATE users SET groupsales = groupsales + 1 WHERE referralcode = ?", [referrer])
+
+     db.query("SELECT CURRENT_TIMESTAMP", (err,result)=>{
+      const _date = result[0].CURRENT_TIMESTAMP
+
+      db.query("INSERT INTO globalsales (referrercode, price, date) VALUES (?,?,?)", [referrer, price, _date], (err, result)=> {
+        if(err){
+          console.log(err)
+        }
+      })
+    })
     //select referrer %
     db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
     (err,result) => {
@@ -176,6 +231,7 @@ app.post('/crossmintwebhook', (req,res) => {
     //plus direct sales claimable amount
     db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
     [claimable, referrer])
+     db.query(`INSERT INTO ${referrer}sales (referralcode, percentage, claimable) VALUES(?,?,?)`, [referrer, referrerPercent, claimable])
 
   const updateClaimable = () => {
   
@@ -197,6 +253,7 @@ app.post('/crossmintwebhook', (req,res) => {
      const claimable = (price * (actualPercentageArr[i] + bonus) /100)
       db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
         [claimable, txArray[i]])
+      db.query(`INSERT INTO ${txArray[i]}sales (referralcode, percentage, claimable) VALUES(?,?,?)`, [referrer, actualPercentageArr[1]+bonus, claimable])
           if (bonus > 0) {
           bonus = 0        
         }
@@ -284,6 +341,17 @@ app.post('/addClaimable', (req,res) => {
      //plus upline group sales & referrer's
     db.query(`UPDATE users SET groupsales = groupsales + 1 WHERE referralcode IN (SELECT upline FROM ${referrer}upline)`)
     db.query("UPDATE users SET groupsales = groupsales + 1 WHERE referralcode = ?", [referrer])
+
+        db.query("SELECT CURRENT_TIMESTAMP", (err,result)=>{
+      const _date = result[0].CURRENT_TIMESTAMP
+
+      db.query("INSERT INTO globalsales (referrercode, price, date) VALUES (?,?,?)", [referrer, price, _date], (err, result)=> {
+        if(err){
+          console.log(err)
+        }
+      })
+    })
+
     //select referrer %
     db.query(`SELECT groupsales, CASE ${cas} END AS percent FROM users WHERE referralcode = ?`, [referrer],
     (err,result) => {
@@ -300,9 +368,12 @@ app.post('/addClaimable', (req,res) => {
     db.query("UPDATE users SET mintreferrals = mintreferrals + 1 WHERE referralcode = ?",
     [referrer])
 
+
     //plus direct sales claimable amount
     db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
     [claimable, referrer])
+
+     db.query(`INSERT INTO ${referrer}sales (referralcode, percentage, claimable) VALUES(?,?,?)`, [referrer, referrerPercent, claimable])
 
 
 
@@ -327,10 +398,10 @@ app.post('/addClaimable', (req,res) => {
      const claimable = (price * (actualPercentageArr[i] + bonus) /100)
       db.query("UPDATE users SET claimable = claimable + ? WHERE referralcode = ?",
         [claimable, txArray[i]])
+      db.query(`INSERT INTO ${txArray[i]}sales (referralcode, percentage, claimable) VALUES(?,?,?)`, [referrer, actualPercentageArr[1]+bonus, claimable])
           if (bonus > 0) {
           bonus = 0        
         }
-
       }
 
     }}
@@ -394,77 +465,123 @@ getArr()
 })
  })
 
+app.post('/getsales', (req,res)=> {
+ const referralCode = req.body.referralcode
 
-// app.post('/submitanswer', (req, res) => {
-// 
-//   const securityAns = req.body.securityAns
-//   const email = req.body.email
-// 
-//   db.query("SELECT * FROM users WHERE email = ? AND securityanswer = ?", [email, securityAns], (err,result)=> {
-// 
-//     if(err){
-//       console.log(err)
-//     } else if(result.length == 0){
-//       res.send({message: "wrong answer"})
-//     } else {
-//       res.send({message: "Correct"})
-//     }
-// 
-// })
-// 
-// })
-// 
-// 
-// 
-// app.post('/changepassword', (req, res) => {
-// 
-//   const newPassword = req.body.newPassword
-//   const email = req.body.email
-// 
-// 
-//      db.query("UPDATE users SET password = ? WHERE email = ?", [newPassword, email], (err,result)=> {
-//       if(err){
-//         console.log(err)
-//       } else{
-//             res.send({message: "successful"})
-//           }
-//         })
-// })
-// 
-// 
-// app.post('/getsecurityques', (req,res) => {
-// 
-//   const email = req.body.email
-// 
-//   db.query("SELECT * FROM users WHERE email = ?",[email],
-//     (err,result) => {
-//         if(err){
-//       console.log(err) 
-// 
-//        }else{
-// 
-//         if (result.length == 0){
-// 
-//           res.send({message: "invalid user"})
-// 
-//         } else {
-// 
-//           db.query("SELECT securityquestion FROM users WHERE email = ?", [email], (err,result) => {
-//               if(err){
-// 
-//             console.log(err)  
-// 
-//              }else{
-// 
-//               res.send(result)
-//               }
-// 
-//         })}} 
-// 
-// })
-// })
+ db.query(`SELECT * FROM ${referralCode}sales`, (err, result) => {
+  if(err) {
+    console.log(err)
+  } else {
+     if (result.length == 0) {
+        res.send({message: "no sales"})
+      } else {
+        res.send(result)
+      }
+  }
+ })
+})
 
+app.post('/forgetpassword', (req,res)=> {
 
+  const email = req.body.email 
+
+  let hash1 = shortid.generate()
+  let hash2 = shortid.generate()
+  let hash3 = shortid.generate()
+  const verifyHash = hash1.concat(hash2, hash3)
+
+  db.query(
+    "SELECT * FROM users WHERE email = ? ",
+    [email], (err, result) => {
+
+       if(err){
+    console.log(err)
+    
+     }else{
+
+      if(result.length == 0) {
+        res.send({message: "User does not exist. Please create an account!"})
+      } else if (result[0].status !== 'active') {
+        res.send({message: "Please verify your email first."})
+      } else {
+
+        db.query("SELECT * FROM verifyresetpassword WHERE email = ?", [email], (err,result) => {
+          if(result.length == 0) {
+             db.query("INSERT INTO verifyresetpassword (hash, email) VALUES (?,?)", [verifyHash, email], (err, result) => {
+          if (err) {
+            console.log(err)
+          } else {
+            sendPasswordMail(verifyHash, email)
+            res.send({message: "success"})
+          }
+
+        })
+
+          }else {
+             db.query("UPDATE verifyresetpassword SET hash = ? WHERE email = ?", [verifyHash, email], (err, result) => {
+          if (err) {
+            console.log(err)
+          } else {
+            sendPasswordMail(verifyHash, email)
+            res.send({message: "success"})
+          }
+
+        })
+
+          }
+        })
+       
+      }
+    }
+  })
+})
+
+app.post('/verify-resetpassword', (req,res) => {
+  const verifyHash = req.body.verifyHash
+
+  db.query("SELECT * FROM verifyresetpassword WHERE hash = ?", [verifyHash], (err,result) => {
+    if(err) {
+      console.log(err)
+    } else {
+
+      if(result.length == 0) {
+        res.send({message:"User does not exist / already used token."})
+      } else {
+        res.send(result)
+
+      }
+      
+
+    }
+  })
+
+})
+
+app.post('/resetpassword', (req,res) => {
+  const email = req.body.email
+  const password = req.body.password
+
+  db.query("UPDATE users SET password = ? WHERE email = ?", [password, email], (err,result) => {
+    if(err) {
+      console.log(err)
+    } else {
+      if(result.length === 0) {
+        res.send({message:"User does not exist"})
+      } else {
+        db.query("DELETE FROM verifyresetpassword WHERE email = ?", [email], (err,result) => {
+          if(err) {
+            console.log(err)
+          } else {
+            res.send({message: "success"})
+          }
+          
+        })
+        
+      }
+    }
+  })
+
+})
 
 
 
@@ -507,6 +624,7 @@ app.post('/register', (req,res) => {
                           db.query(`CREATE TABLE ${referralCode}upline (upline varchar(255))`) 
 
                           db.query(`CREATE TABLE ${referralCode}downline (downline varchar(255))`) 
+                          db.query(`CREATE TABLE ${referralCode}sales (id INT AUTO_INCREMENT NOT NULL, referralcode varchar(255) not null, percentage INT not null, claimable FLOAT not null, PRIMARY KEY(id))`) 
 
                            db.query(`SELECT * FROM ${referrer}upline`, (err, result)=> {
                             if (err) {
@@ -532,7 +650,7 @@ app.post('/register', (req,res) => {
                           db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer]) 
 
                           db.query("INSERT INTO verifysignup (hash, email) VALUES(?,?)", [verifyHash, email], (err, result) => {
-                            sendMail(verifyHash, email)
+                            sendVerifyMail(verifyHash, email)
                             res.send({message: "success"})
 
                           })                        
@@ -556,7 +674,7 @@ app.post('/verify-signup', (req,res) => {
     } else {
 
       if(result.length === 0) {
-        res.send({message:"User does not exist / already verified."})
+        res.send({message:"Token has expired / already verified."})
       } else {
         const email = result[0].email
        db.query(
@@ -586,16 +704,21 @@ app.post('/verify-signup', (req,res) => {
 
 
 app.post('/resend-verifysignup', (req, res) => {
-  const email = req.body.verifyHash
+  const email = req.body.email
 
   let hash1 = shortid.generate()
   let hash2 = shortid.generate()
   let hash3 = shortid.generate()
-  const verifyHash = string.concat(hash1, hash2, hash3)
+  const verifyHash = hash1.concat(hash2, hash3)
 
-  db.query("UPDATE verifysignup SET hash = ? WHERE email = ?", [email], (req,res) => {
-    sendMail(hash, email)
-    res.send({message: "message sent"})
+  db.query("UPDATE verifysignup SET hash = ? WHERE email = ?", [verifyHash, email], (err, result) => {
+    if(err) {
+      console.log(err)
+    } else {
+      sendVerifyMail(verifyHash, email)
+      res.send({message: "sent"})
+      
+    }
   })
 })
 
@@ -706,28 +829,43 @@ app.post('/login', (req,res) => {
 
 
 
-app.post('/refData', (req,res) => {
-  const referralCode = req.body.refCode
+// app.post('/refData', (req,res) => {
+//   const referralCode = req.body.refCode
+// 
+// //view tree
+// 
+//   db.query(
+//     "SELECT * FROM LuckyUsers.users AS u LEFT JOIN LuckyUsers.users AS s on s.referrercode = u.referralcode WHERE s.referrercode = ?",
+//     [referralCode],
+//     (err, result) => {
+//       if(err) {
+//         res.send({err: err})
+//       }
+// 
+//       if(result.length > 0) {
+//         res.send(result)
+//       } else {
+//         res.send({message: "no Referral signups yet"})
+//       }
+//     })
+// })
 
-//view tree
+app.post('/getgroup', (req, res) => {
+  const referralCode = req.body.referralCode
 
-  db.query(
-    "SELECT * FROM LuckyUsers.users AS u LEFT JOIN LuckyUsers.users AS s on s.referrercode = u.referralcode WHERE s.referrercode = ?",
-    [referralCode],
-    (err, result) => {
-      if(err) {
-        res.send({err: err})
-      }
-
-      if(result.length > 0) {
-        res.send(result)
+  db.query(`SELECT id, referralcode, signupreferrals, mintreferrals, groupsales FROM users WHERE referralcode IN (select * from ${referralCode}downline)`, (err, result)=> {
+    if(err) {
+       console.log(err)
+    } else { 
+      if (result.length == 0) {
+        res.send({message: "no group"})
       } else {
-        res.send({message: "no Referral signups yet"})
+        res.send(result)
       }
-    })
+    }
+  })
+
 })
-
-
 
 
 
