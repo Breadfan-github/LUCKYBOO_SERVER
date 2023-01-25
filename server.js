@@ -3,6 +3,8 @@ const mysql = require("mysql")
 const cors = require("cors")
 const shortid = require('shortid-36')
 const cookieParser = require('cookie-parser')
+const nodemailer = require('nodemailer');
+const { google } = require('googleapis');
 
 const app = express()
 
@@ -18,19 +20,85 @@ const db = mysql.createConnection({
   database: "LuckyUsers",
 })
 
-app.post('/set-cookie', (req,res) => {
-  console.log("setting cookie")
-  console.log(req.body)
+
+
+
+
+
+
+// These id's and secrets should come from .env file.
+const CLIENT_ID = '756289747704-uupaqil634c9jqtan712qcop0upjbjni.apps.googleusercontent.com';
+const CLEINT_SECRET = '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';
+const REDIRECT_URI = 'https://developers.google.com/oauthplayground';
+const REFRESH_TOKEN = '1//041b509lXSPNfCgYIARAAGAQSNwF-L9IrEecZPl1Ljlbr_Cqg9iCG8C_JwuokQv2Bs5WM4rGo9T1P008JZ5ElFGPhJk6uEK8pkw4';
+
+const oAuth2Client = new google.auth.OAuth2(
+  CLIENT_ID,
+  CLEINT_SECRET,
+  REDIRECT_URI
+);
+oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+
+async function sendMail(hash, email) {
+  try {
+    const accessToken = await oAuth2Client.getAccessToken();
+
+    const transport = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: 'luckyboonoreply@gmail.com',
+        clientId: CLIENT_ID,
+        clientSecret: CLEINT_SECRET,
+        refreshToken: REFRESH_TOKEN,
+        accessToken: accessToken,
+      },
+    });
+
+    const mailOptions = {
+      from: 'luckyboo-no-reply <luckyboonoreply@gmail.com>',
+      to: email,
+      subject: '[LUCKY] Verify your Lucky Affiliate Account.',
+      text:  `Dear ${email},
+
+Before you can start with us, you need to verify your email address. Click on the link below to verify your account.
+
+http://localhost:3000/verifysignup/?token=${hash} 
+
+Thanks, The Lucky Team`,
+      html: `<h4> Dear ${email} </h4>,
+
+<p> Before you can start with us, you need to verify your email address. <p/>
+<p>  Click on the link below to verify your account. <p/>
+
+<p>http://localhost:3000/verifysignup/?token=${hash} <p/>
+
+<p> Thanks, The Lucky Team <p/>`,
+    };
+
+    const result = await transport.sendMail(mailOptions);
+    return result;
+  } catch (error) {
+    return error;
+  }
+}
+
+
+
+
+app.post('/set-refcookie', (req,res) => {
+
   const ref = req.body.ref
-  res.cookie('ref', ref)
-  res.send({message: "cookies set"})
+  res.cookie('LuckyRef', ref)
+  res.send(req.cookie)
+
 })
 
-app.get('/set-cookieget', (req,res) => {
- 
-  res.cookie('ref', 'ref')
-  res.send({message: "cookies set"})
+
+app.get('/get-refcookie', (req,res)=> {
+  res.send(req.cookies)
 })
+
 
 app.post('/resetclaimable', (req,res) => {
   const email = req.body.referrer
@@ -47,12 +115,12 @@ app.post('/checkreferralcode', (req,res) => {
 
   const referralCode = req.body.referrer
 
+
   db.query("SELECT * FROM users WHERE referralcode = ?",[referralCode],
        (err,result) => { 
 
      if(err){
     console.log("Error occured while executing query: ",err)
-    res.send({message: "Error occured while executing query"})
 }else{
     if (result.length === 0) {
       res.send({message: "Invalid referral link!"})
@@ -406,7 +474,12 @@ app.post('/register', (req,res) => {
   const password = req.body.password
   const referrer = req.body.referrer
   const referralCode = shortid.generate()
-  let loginResult
+
+  let hash1 = shortid.generate()
+  let hash2 = shortid.generate()
+  let hash3 = shortid.generate()
+  const verifyHash = hash1.concat(hash2, hash3)
+
 
     db.query("SELECT * FROM users WHERE email = ?",[email],
     (err,result) => {
@@ -440,7 +513,7 @@ app.post('/register', (req,res) => {
                               console.log(err)
 
                             } else {    
-                            console.log(result.length) 
+                            
 
                               for(var i = 0; i < result.length; i++) {
 
@@ -456,9 +529,13 @@ app.post('/register', (req,res) => {
 
                           db.query(`INSERT INTO ${referralCode}upline SELECT * FROM ${referrer}upline`)
                            //add upline referralcode into your upline table
-                          db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer], () => {
-                            res.send({message: "Registration successful. Please Login."})
-                          })                         
+                          db.query(`INSERT INTO ${referralCode}upline (upline) VALUES(?)`, [referrer]) 
+
+                          db.query("INSERT INTO verifysignup (hash, email) VALUES(?,?)", [verifyHash, email], (err, result) => {
+                            sendMail(verifyHash, email)
+                            res.send({message: "success"})
+
+                          })                        
                        } 
           }) }else {
         res.send({message: "User already exists. Please login."})
@@ -468,13 +545,100 @@ app.post('/register', (req,res) => {
       
     })
         
-
       })
 
+app.post('/verify-signup', (req,res) => {
+  const verifyHash = req.body.verifyHash
+
+  db.query("SELECT * FROM verifysignup WHERE hash = ?", [verifyHash], (err,result) => {
+    if(err) {
+      console.log(err)
+    } else {
+
+      if(result.length === 0) {
+        res.send({message:"User does not exist / already verified."})
+      } else {
+        const email = result[0].email
+       db.query(
+    "UPDATE users SET status = 'active' WHERE email = ?", [email], (err, result) => {
+      if(err) {
+        console.log(err)
+      } else {
+        db.query("DELETE FROM verifysignup WHERE email = ?", [email], (err, result) => {
+
+          if(err) {
+            console.log(err)
+          } else {
+            res.send({message: "verify successful."})   
+          }
+        })
+       
+      }
+    })
+
+      }
+      
+
+    }
+  })
+
+})
+
+
+app.post('/resend-verifysignup', (req, res) => {
+  const email = req.body.verifyHash
+
+  let hash1 = shortid.generate()
+  let hash2 = shortid.generate()
+  let hash3 = shortid.generate()
+  const verifyHash = string.concat(hash1, hash2, hash3)
+
+  db.query("UPDATE verifysignup SET hash = ? WHERE email = ?", [email], (req,res) => {
+    sendMail(hash, email)
+    res.send({message: "message sent"})
+  })
+})
+
+app.get('/get-logincookie', (req,res)=> {
+  res.send(req.cookies)
+})
+
+app.post('/cookie-login', (req,res) => {
+  const sessionID = req.body.sessionID
+
+  db.query("SELECT * FROM loginsessions WHERE sessionid = ?", [sessionID], (err,result) => {
+    if(err) {
+      console.log(err)
+    } else {
+      const id = result[0].accountid
+       db.query(
+    "SELECT id, email, referralcode, referrercode, signupreferrals, mintreferrals, groupsales, claimable FROM users WHERE id = ?",
+    [id], (err, result) => {
+      if(err) {
+        console.log(err)
+      } else {
+        res.send(result)   
+      }
+    })
+
+    }
+  })
+})
+
+app.get('/del-login', (req,res) => {
+  res.clearCookie('LuckySession')
+  res.send("cookie deleted")
+})
+
+// app.get('/del-ref', (req,res) => {
+//   res.clearCookie('LuckyRef')
+//   res.send("cookie deleted")
+// })
 
 app.post('/login', (req,res) => {
   const email = req.body.email 
   const password = req.body.password
+  const rememberLogin = req.body.rememberLogin
 
   db.query(
     "SELECT * FROM users WHERE email = ? ",
@@ -486,22 +650,54 @@ app.post('/login', (req,res) => {
      }else{
 
       if(result.length == 0) {
-        res.send({message: "Invalid user"})
+        res.send({message: "User does not exist. Please create an account!"})
+      } else if (result[0].status !== 'active') {
+        res.send({message: "Please verify your email first."})
       } else {
-
         db.query(
-    "SELECT * FROM users WHERE email = ? AND password = ?",
+    "SELECT id, email, referralcode, referrercode, signupreferrals, mintreferrals, groupsales, claimable FROM users WHERE email = ? AND password = ?",
     [email, password],
     (err, result) => {
       if(err) {
         console.log(err)
-      }
+      } else {
 
-      if(result.length == 0) {
+        if(result.length == 0) {
         res.send({message: "Wrong email / password combination"}) 
       } else {
-        res.send(result)       
+
+        if (rememberLogin) {
+
+          const loginData = result
+          const id = result[0].id
+          const id1 = shortid.generate()
+          const id2 = shortid.generate()
+          const sessionID = id1.concat(id2)
+         
+
+          
+          db.query("INSERT INTO loginsessions (accountid, sessionid) VALUES(?,?)", [id, sessionID], (err, result)=> {
+            if(err) {
+              console.log(err)
+            } else {
+              
+              
+              res.cookie('LuckySession', sessionID)
+              res.send(loginData)
+              
+            }
+          })
+         
+        }
+         else {
+          res.send(result)   
+        }
+            
       }
+
+      }
+
+     
     })     
       }
      }     
