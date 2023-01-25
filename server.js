@@ -10,7 +10,7 @@ const app = express()
 
 app.use(express.json())
 app.use(cookieParser())
-app.use(cors({credentials: true, origin: 'https://app.lucky.boo'}));
+app.use(cors({credentials: true, origin: ['https://app.lucky.boo', 'https://www.lucky.boo']}));
 
 const db = mysql.createConnection({
   user: "root",
