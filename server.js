@@ -8,7 +8,7 @@ const { google } = require('googleapis');
 
 const app = express()
 
-app.use(cors({credentials: true, origin: 'http://localhost:3000'}));
+app.use(cors({credentials: true, origin: '*'}));
 app.use(express.json())
 app.use(cookieParser())
 
@@ -147,7 +147,8 @@ app.get('/get-refcookie', (req,res)=> {
 
 app.post('/resetclaimable', (req,res) => {
   console.log("reset claim api called")
-  const email = req.body.referrer
+  const email = req.body.email
+
   db.query("UPDATE users SET claimable = 0 WHERE email = ?", [email], 
     (err, result) => {
       if(err) {
